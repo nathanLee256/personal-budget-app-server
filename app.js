@@ -7,8 +7,7 @@ const swaggerUI = require('swagger-ui-express');
 const swaggerDocument = require('./docs/swagger.json');
 const cors = require('cors'); // Import cors
 
-var usersRouter = require('./routes/users');
-var indexRouter = require('./routes/index');
+
 
 
 // imports the object exported from knexfile which contains database connection information
@@ -61,8 +60,15 @@ app.get("/knex", function (req, res){
   res.send("Version logged successfully!");
 });
 
-app.use('/', indexRouter);
-app.use('/users', usersRouter);
+// START import and then activate all  app routes contained within index.js (the central hub for all app routes)
+  var indexRouter = require('./routes/index');
+  /* 
+    the line above says "Take all routes defined in index.js (which includes users, gifts, etc.) and make them accessible 
+    from the server app root path (/)."
+  */
+  app.use('/', indexRouter);
+//END import
+
 app.use('/docs', swaggerUI.serve, swaggerUI.setup(swaggerDocument));
 
 // catch 404 and forward to error handler
