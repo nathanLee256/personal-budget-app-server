@@ -14,18 +14,71 @@ var router = express.Router();
 
         Example Gift Record:
             {
-            type: "One-off",
-            organisation: "Salvation Army",
-            amount: 50,
-            date: "23/05/2025",
-            description: "Red shield appeal",
-            receipt: "{url_path}"
+                type: "One-off",
+                organisation: "Salvation Army",
+                amount: 50,
+                date: "23/05/2025",
+                description: "Red shield appeal",
+                receipt: "{url_path}"
             }
     */
     router.get("/retrieve_gift_items", (req, res) => {
-        //extract query strings
-        const userId = req.query.UserId; 
-        const year = req.query.Year;
+
+        //extract query strings (with case sensitivity disabled)
+        const userId = req.query.UserId || req.query.userId;
+        const selectedYear = req.query.Year || req.query.year;
+
+        //early exit return if query parameters are not as expected in the client-side GET request
+        if (!userId || !selectedYear) {
+            return res.status(400).json({ error: "Missing required query parameters: UserId and Year" });
+        }
+
+
+        //prepare a payload object
+        const payloadObj = {
+            IsData: null,
+            userGifts: []  //data objects will be stored in this prop
+        };
+
+        /* 
+            General knex syntax for the following query:
+
+            SELECT * FROM table_name WHERE column1 = value1 AND column2 = value2;
+
+            knex('table_name')
+                .where('column1', value1)
+                .andWhere('column2', value2)
+        
+        */
+
+        //construct and execute the SQL query using knex
+        req.db
+            .from('gift_items')
+            .select(
+                "gift_type as giftType",
+                "organisation_id as organisation",
+                "amount",
+                "date",
+                "description",
+                "receipt_url as receipt",
+                "is_tax_deductable as dgr"
+            )
+            .where('user_id', userId)
+            .andWhereRaw('YEAR(`date`) = ?', [selectedYear])
+
+            //set up the Promise chain
+            /* this query should return an array of data objects (gifts) in the form above*/
+            .then((gifts) => {
+                payloadObj.userGifts = gifts;
+                payloadObj.IsData = gifts.length > 0; // dynamically assign IsData value (based on the length of userGifts[])
+                return res.json(payloadObj);
+                
+            })
+            .catch((error) => {
+                console.error("❌ Database error:", error.message, "\n", error.stack);
+                res.status(500).json({ error: "Internal server error", details: error.message });
+            });
+
         
 
 
@@ -77,6 +130,14 @@ var router = express.Router();
 
 
 //END ROUTE 2
+
+//START ROUTE 3
+    router.post("/update_gift_items", (req, res) => {
+
+    });
+
+
+//END ROUTE 3
 
 
 // Export the router for use in other parts of the application
