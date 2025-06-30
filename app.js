@@ -45,6 +45,12 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+/* 
+  This line tells Express: Whenever a GET request comes in (from the client) with a URL that starts with /uploads, 
+  go look inside the uploads/ folder and try to find a matching file — and serve that file directly to the browser.” */
+  app.use('/uploads', express.static('uploads'));
+
+
 //application route is created to handle HTTP GET requests to the /knex path.
 // route handler performs a simple SQL query which returns the current mySQL version and logs 
 //it to the console, before displaying a message in the browser to indicate success. 
