@@ -94,8 +94,8 @@ var router = express.Router();
         data = {
             "IsData": true,
             "Organisations" : [
-                {"entityName": "Salvation Army", "abn": 1234567},
-                {"entityName": "Red Cross", "abn": 2345678}
+                {"entityName": "Salvation Army", "abn": 1234567, "orgId": 1},
+                {"entityName": "Red Cross", "abn": 2345678, "orgId": 2}
             ]
         }
      */
@@ -111,7 +111,8 @@ var router = express.Router();
             .from("organisations")
             .select(
                 "entity_name as entityName",
-                "organisation_abn as abn"
+                "organisation_abn as abn",
+                "organisation_id as orgId"
             ) //select 2 columns and map them here to their respective properties in the payloadObj object
             /* NB: This will give us exactly the structure our frontend expects, so no mapping required in the frontend */
 
@@ -132,8 +133,40 @@ var router = express.Router();
 //END ROUTE 2
 
 //START ROUTE 3
+
+    /* 
+        this route handles POST requests from the handleSubmit() function in GivingTool.js. It receives the userSelections
+        state object (i.e. a newGift object) which is stored in the NewGift property of the payload (req.body). Then it 
+        updates the gift_items table by inserting the new gift object into table. Then it selects all data objects (gifts)
+        from the updated table, and sends them back to the client (which uses them to update the userGifts state). 
+
+        //payload obj structure
+        const payload = {
+            UserId: userId,
+            NewGift: {
+                giftType: "offering",
+                organisation: {organisation},
+                amount: 50,
+                date:"2025-06-27",    
+                description: "Red shield appeal",
+                receipt: "/uploads/receipts/myfile.pdf"
+            }
+        };
+    */
     router.post("/update_gift_items", (req, res) => {
 
+        //extract the userId and newGift
+        const { UserId, NewGift } = req.body;
+
+        //construct the following db query using knex query builder
+
+        /* 
+            INSERT INTO gift_items(user_id, gift_type, organisation_id, amount, date, description, receipt_url)
+            VALUES(UserId, NewGift.giftType, NewGift.organisation.orgId, NewGift.amount, NewGift.date, NewGift.description, NewGift.receipt.name );
+        */
+
+
+        
     });
 
 
