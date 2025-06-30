@@ -1,6 +1,7 @@
 var express = require('express');
 var router = express.Router();
 
+
 /* This file contains all server routes which handle requests from the GivingTool.js page in the client */
 
 //START ROUTE 1
@@ -171,6 +172,47 @@ var router = express.Router();
 
 
 //END ROUTE 3
+
+//START ROUTE 4
+
+    /* 
+        Handles POST requests from the handleFileChange() function in GivingTool which runs when the user selects a file
+        from the fs. Server receives the file, and stores it in the /uploads folder. Server sends back the string url path 
+        which references the file (and the location it is stored on the server).
+    */
+   //import multer
+   const multer = require('multer'); //needed to handle the file upload
+
+    //START instantiate middleware
+        // 1️⃣ Configure storage for multer
+        const storage = multer.diskStorage({
+        destination: function (req, file, cb) {
+            cb(null, './uploads/'); // folder to save in
+        },
+        filename: function (req, file, cb) {
+            cb(null, file.originalname); // save with original name
+        }
+        });
+
+        // 2️⃣ Initialize multer with this storage
+        const upload = multer({ storage: storage });
+    //END middleware
+
+    router.post("/upload_receipt", upload.single("receipt"), (req, res) => {
+
+        // `multer` puts file info in `req.file`
+        if (!req.file) {
+            return res.status(400).json({ error: "No file uploaded." });
+        }
+
+        // Build file path to return
+        const fileUrl = `/uploads/${req.file.filename}`;
+
+        // Send back file URL to client
+        res.json({ fileUrl: fileUrl });
+    });
+
+//END ROUTE 4
 
 
 // Export the router for use in other parts of the application
