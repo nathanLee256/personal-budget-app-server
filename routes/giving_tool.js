@@ -178,26 +178,51 @@ var router = express.Router();
     /* 
         Handles POST requests from the handleFileChange() function in GivingTool which runs when the user selects a file
         from the fs. Server receives the file, and stores it in the /uploads folder. Server sends back the string url path 
-        which references the file (and the location it is stored on the server).
+        which references the file (and the location it is stored on the server). Here we set up a middleware chain 
+        consisting of 4 functions and they are written below in the order that they are called when a request is made to this route.
     */
    //import multer
    const multer = require('multer'); //needed to handle the file upload
 
-    //START instantiate middleware
-        // 1️⃣ Configure storage for multer
-        const storage = multer.diskStorage({
+   // Middleware 2- Configure storage for multer
+    const storage = multer.diskStorage({
+
+        //Middleware 2
         destination: function (req, file, cb) {
             cb(null, './uploads/'); // folder to save in
         },
+        //Middleware 3
         filename: function (req, file, cb) {
             cb(null, file.originalname); // save with original name
         }
-        });
+    });
 
-        // 2️⃣ Initialize multer with this storage
-        const upload = multer({ storage: storage });
-    //END middleware
+    // Initialize multer with this storage
+    const upload = multer({ 
+        storage: storage,
 
+        //Middleware 1
+        fileFilter: function (req, file, cb) {
+
+            // Accept .png, .jpeg, .pdf, .heic
+            const allowedTypes = [
+                'image/png',
+                'image/jpeg',
+                'application/pdf',
+                'image/heic'
+            ];
+
+            if (allowedTypes.includes(file.mimetype)) {
+                cb(null, true); // accept
+            } else {
+                cb(new Error('Only .png, .jpeg, .pdf, or .heic files are allowed!'));
+            }
+        }
+    });
+
+    
+
+    //middleware 4- the callback function 
     router.post("/upload_receipt", upload.single("receipt"), (req, res) => {
 
         // `multer` puts file info in `req.file`
