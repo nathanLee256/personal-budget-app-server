@@ -154,22 +154,68 @@ var router = express.Router();
             }
         };
     */
-    router.post("/update_gift_items", (req, res) => {
+    router.post("/update_gift_items", async (req, res) => {
 
         //extract the userId and newGift
         const { UserId, NewGift } = req.body;
 
-        //construct the following db query using knex query builder
+        // next we need to perform 2 successive db queries using knex query builder. We'll use a nested try/catch implementation
+        try{
+            try{
+                /* 
+                    Q1: insert new values into gift_items
+                    INSERT INTO gift_items(user_id, gift_type, organisation_id, amount, date, description, receipt_url)
+                    VALUES(UserId, NewGift.giftType, NewGift.organisation.orgId, NewGift.amount, NewGift.date, NewGift.description, NewGift.receipt.name );
+                */
+                 await req.db
+                    .from("gift_items") //table
+                    .insert({
+                        user_id: UserId,                                // required value: userId of the giver
+                        gift_type: NewGift.giftType,                    // required: type of gift (e.g., donation, item, etc.)
+                        organisation_id: NewGift.organisation.orgId,    // optional: organisation ID (can be null if not provided)
+                        amount: NewGift.amount,                         // required: gift amount
+                        date: NewGift.date,                             // required: date string (ensure format is acceptable to DB)
+                        description: NewGift.description || null,       // optional: gift description (null if none provided)
+                        receipt_url: NewGift.receipt  ? NewGift.receipt.name : null, // optional: URL or filename of receipt (null if uploading later)
+                        is_tax_deductable: NewGift.organisation.orgId ? true : false // insert value derived from the organisation_id column value
+                    })
 
-        /* 
-            INSERT INTO gift_items(user_id, gift_type, organisation_id, amount, date, description, receipt_url)
-            VALUES(UserId, NewGift.giftType, NewGift.organisation.orgId, NewGift.amount, NewGift.date, NewGift.description, NewGift.receipt.name );
-        */
+            }catch (q1Err){
+                console.error('Error occurred during INSERT query:', q1Err);
+                //the line below creates a new Error object and assigns it the 'INSERT query failed:' as its .message prop
+                //then we throw the new Error object to the outer catch block which will display the q1Err.message 
+                // appended to the general error message
+                throw new Error('INSERT query failed: ' + q1Err.message);
+            };
 
+            try{
+                /* 
+                    Q2: select and return all rows (with user_id === UserId) from updated table 
+                    SELECT * FROM gift_items WHERE user_id = <UserId>
+                */
 
+                //Q2 resolves (successfully) to an array of data objects (giftObjects)
+                const giftObjects = await req.db
+                    .from("gift_items")
+                    .where("user_id", UserId)
+                    .select("*");
+
+                //send data back to client
+                res.json(giftObjects);
+
+            }catch(q2Err){
+                console.error('Error occurred during SELECT query:', q2Err);
+                throw new Error(q2Err.message); // throw to the outer catch
+            }
         
+        //catches the new Error object thrown by either of the inner try blocks
+        }catch(err){
+            //runs if either Promise (Q1 or Q2) resolves to an error object
+            //e.g. if Q1 inner catch runs, line 213 will output: 'Error occurred in one of the SQL queries: INSERT query failed' 
+            console.error('Error occurred in one of the SQL queries:', err);
+            res.status(500).json({ error: 'Something went wrong while processing your request.' });
+        }; 
     });
-
 
 //END ROUTE 3
 
