@@ -55,9 +55,11 @@ var router = express.Router();
         //construct and execute the SQL query using knex
         req.db
             .from('gift_items')
+            .join("organisations", "gift_items.organisation_id", "organisations.organisation_id")
             .select(
+                "id as id",
                 "gift_type as giftType",
-                "organisation_id as organisation",
+                "organisations.entity_name as organisation",
                 "amount",
                 "date",
                 "description",
@@ -197,8 +199,18 @@ var router = express.Router();
                 //Q2 resolves (successfully) to an array of data objects (giftObjects)
                 const giftObjects = await req.db
                     .from("gift_items")
-                    .where("user_id", UserId)
-                    .select("*");
+                    .join("organisations", "gift_items.organisation_id", "organisations.organisation_id")
+                    .where("gift_items.user_id", UserId)
+                    .select(
+                        "gift_items.id as id",
+                        "gift_items.gift_type as giftType",
+                        "organisations.entity_name as organisation",
+                        "gift_items.amount as amount",
+                        "gift_items.date as date",
+                        "gift_items.description as description",
+                        "gift_items.receipt_url as receipt",
+                        "gift_items.is_tax_deductable as tax"  
+                    );
 
                 //send data back to client
                 res.json(giftObjects);
