@@ -178,7 +178,7 @@ var router = express.Router();
                         amount: NewGift.amount,                         // required: gift amount
                         date: NewGift.date,                             // required: date string (ensure format is acceptable to DB)
                         description: NewGift.description || null,       // optional: gift description (null if none provided)
-                        receipt_url: NewGift.receipt  ? NewGift.receipt.name : null, // optional: URL or filename of receipt (null if uploading later)
+                        receipt_url: NewGift.receipt  ? NewGift.receipt : null, // optional: URL or filename of receipt (null if uploading later)
                         is_tax_deductable: NewGift.organisation.orgId ? true : false // insert value derived from the organisation_id column value
                     })
 
