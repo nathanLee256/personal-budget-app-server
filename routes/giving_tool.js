@@ -297,6 +297,26 @@ var router = express.Router();
 
 //END ROUTE 4
 
+//START ROUTE 5
+    /* 
+        This route handles HTTP DELETE requests from the handleDelete() button in the GivingTool page which runs when
+        the user clicks one of the '-delete item' buttons in the final column of the top table (to delete a gift object)
+    */
+    router.post("/delete_gift", async (req, res) => {
+
+        //extract query string (with case sensitivity disabled)
+        const giftId = req.query.GiftID || req.query.giftId; //stores the id of gift_item (PK which references object in gift_items)
+        
+        //construct and execute the following query
+        //DELETE FROM gift_items WHERE id = ?;
+
+        knex('gift_items')
+            .where({ id: giftId })
+            .del()
+    });
+
+//END ROUTE 5
+
 
 // Export the router for use in other parts of the application
 module.exports = router;
