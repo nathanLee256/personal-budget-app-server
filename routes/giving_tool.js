@@ -302,17 +302,38 @@ var router = express.Router();
         This route handles HTTP DELETE requests from the handleDelete() button in the GivingTool page which runs when
         the user clicks one of the '-delete item' buttons in the final column of the top table (to delete a gift object)
     */
-    router.post("/delete_gift", async (req, res) => {
+    router.delete("/delete_gift/:giftId", async (req, res) => {
 
-        //extract query string (with case sensitivity disabled)
-        const giftId = req.query.GiftID || req.query.giftId; //stores the id of gift_item (PK which references object in gift_items)
+        //extract query string 
+        const giftId = req.params.giftId; //stores the id of gift_item (PK which references object in gift_items)
+        const ZERO = 0;
+        const ONE = 1;
+
+        try{
+
+            //construct and execute the following query (which returns a number representing the number of rows deleted/modified)
+            //DELETE FROM gift_items WHERE id = ?;
+            const rowsDeleted = await req.db('gift_items')
+                .where({ id: giftId })
+                .del();
+
+            if(rowsDeleted === ZERO){
+                return res.status(404).json({ error: 'Gift not found. Database unchanged' });
+            }
+
+            if(rowsDeleted > ONE){
+                return res.status(404).json({ error: 'Error in db implementation. Multiple rows deleted' });
+            }
+            
+            //send a response in the event of successful deletion
+            return res.status(200).json({ message: "Gift deleted successfully" });
         
-        //construct and execute the following query
-        //DELETE FROM gift_items WHERE id = ?;
-
-        knex('gift_items')
-            .where({ id: giftId })
-            .del()
+        
+        }catch(err){
+            console.error('Error occurred in the DELETE SQL query:', err);
+            return res.status(500).json({ error: err.message || "Server error" });
+        }; 
+          
     });
 
 //END ROUTE 5
