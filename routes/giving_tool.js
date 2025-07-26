@@ -161,6 +161,19 @@ var router = express.Router();
         //extract the userId and newGift
         const { UserId, NewGift } = req.body;
 
+        //extract the string date value stored in NewGift.date
+        const dateStr = NewGift.date; // "2025-06-30"
+
+        //convert it to a date object
+        const dateObj = new Date(dateStr);
+
+        //extract the month string and year int from the date obj
+        const selectedMonth = String(dateObj.getMonth() + 1).padStart(2, '0'); // "06"
+        const selectedYear = dateObj.getFullYear(); // 2025
+
+        console.log("Month:", selectedMonth); // "06"
+        console.log("Year:", selectedYear);   // 2025
+
         // next we need to perform 2 successive db queries using knex query builder. We'll use a nested try/catch implementation
         try{
             try{
@@ -201,6 +214,8 @@ var router = express.Router();
                     .from("gift_items")
                     .join("organisations", "gift_items.organisation_id", "organisations.organisation_id")
                     .where("gift_items.user_id", UserId)
+                    .andWhereRaw("MONTH(gift_items.date) = ?", [selectedMonth])
+                    .andWhereRaw("YEAR(gift_items.date) = ?", [selectedYear])
                     .select(
                         "gift_items.id as id",
                         "gift_items.gift_type as giftType",
@@ -213,7 +228,34 @@ var router = express.Router();
                     );
 
                 //send data back to client
-                res.json(giftObjects);
+
+                //mapping object
+                const monthMap = {
+                    
+                    "01": "January",    
+                    "02" : "February",
+                    "03" : "March",
+                    "04" : "April",
+                    "05" : "May",
+                    "06" : "June",
+                    "07" : "July",
+                    "08" : "August",
+                    "09" : "September",
+                    "10" : "October",
+                    "11" : "November",
+                    "12" : "December"
+        
+                }
+
+                const month = monthMap[selectedMonth]
+
+                const payload = {
+                    month: month,  //e.g. "January"
+                    year: selectedYear, // e.g. 2025
+                    userGifts: giftObjects //e.g. array of user gift objects for selected year and month
+                    
+                };
+                res.json(payload);
 
             }catch(q2Err){
                 console.error('Error occurred during SELECT query:', q2Err);
