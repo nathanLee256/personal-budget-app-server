@@ -55,19 +55,19 @@ var router = express.Router();
         //construct and execute the SQL query using knex
         req.db
             .from('gift_items')
-            .join("organisations", "gift_items.organisation_id", "organisations.organisation_id")
+            .leftJoin("organisations", "gift_items.organisation_id", "organisations.organisation_id")
             .select(
-                "id as id",
-                "gift_type as giftType",
-                "organisations.entity_name as organisation",
-                "amount",
-                "date",
-                "description",
-                "receipt_url as receipt",
-                "is_tax_deductable as dgr"
+                "gift_items.id as id",
+                "gift_items.gift_type as giftType",
+                req.db.raw("COALESCE(organisations.entity_name, gift_items.organisation) as organisation"),
+                "gift_items.amount as amount",
+                "gift_items.date as date",
+                "gift_items.description as description",
+                "gift_items.receipt_url as receipt",
+                "gift_items.is_tax_deductable as dgr"
             )
-            .where('user_id', userId)
-            .andWhereRaw('YEAR(`date`) = ?', [selectedYear])
+            .where('gift_items.user_id', userId)
+            .andWhereRaw('YEAR(gift_items.date) = ?', [selectedYear])
 
             //set up the Promise chain
             /* this query should return an array of data objects (gifts) in the form above*/
@@ -187,6 +187,7 @@ var router = express.Router();
                     .insert({
                         user_id: UserId,                                // required value: userId of the giver
                         gift_type: NewGift.giftType,                    // required: type of gift (e.g., donation, item, etc.)
+                        organisation: NewGift.organisation.entityName,
                         organisation_id: NewGift.organisation.orgId,    // optional: organisation ID (can be null if not provided)
                         amount: NewGift.amount,                         // required: gift amount
                         date: NewGift.date,                             // required: date string (ensure format is acceptable to DB)
@@ -212,20 +213,21 @@ var router = express.Router();
                 //Q2 resolves (successfully) to an array of data objects (giftObjects)
                 const giftObjects = await req.db
                     .from("gift_items")
-                    .join("organisations", "gift_items.organisation_id", "organisations.organisation_id")
+                    .leftJoin("organisations", "gift_items.organisation_id", "organisations.organisation_id")
                     .where("gift_items.user_id", UserId)
                     .andWhereRaw("MONTH(gift_items.date) = ?", [selectedMonth])
                     .andWhereRaw("YEAR(gift_items.date) = ?", [selectedYear])
                     .select(
                         "gift_items.id as id",
                         "gift_items.gift_type as giftType",
-                        "organisations.entity_name as organisation",
+                        req.db.raw("COALESCE(organisations.entity_name, gift_items.organisation) as organisation"),
                         "gift_items.amount as amount",
                         "gift_items.date as date",
                         "gift_items.description as description",
                         "gift_items.receipt_url as receipt",
-                        "gift_items.is_tax_deductable as tax"  
+                        "gift_items.is_tax_deductable as tax"
                     );
+
 
                 //send data back to client
 
