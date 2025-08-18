@@ -283,21 +283,31 @@ var router = express.Router();
         which references the file (and the location it is stored on the server). Here we set up a middleware chain 
         consisting of 4 functions and they are written below in the order that they are called when a request is made to this route.
     */
-   //import multer
+   //import modules
    const multer = require('multer'); //needed to handle the file upload
+   const path = require('path');
+   const fs = require('fs');
 
    // Middleware 2- Configure storage for multer
     const storage = multer.diskStorage({
-
-        //Middleware 2
         destination: function (req, file, cb) {
-            cb(null, './uploads/'); // folder to save in
+            const month = req.query.month || 'UnknownMonth';
+            const year = req.query.year || 'UnknownYear';
+            // Use process.cwd() to ensure it's relative to project root
+            const uploadDir = path.join(process.cwd(), 'uploads', year, month);
+
+            fs.mkdirSync(uploadDir, { recursive: true });
+            cb(null, uploadDir);
         },
-        //Middleware 3
         filename: function (req, file, cb) {
-            cb(null, file.originalname); // save with original name
+            // Optionally, you can prepend a timestamp to avoid collisions
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            const ext = path.extname(file.originalname);
+            const baseName = path.basename(file.originalname, ext);
+            cb(null, `${baseName}-${uniqueSuffix}${ext}`);
         }
     });
+
 
     // Initialize multer with this storage
     const upload = multer({ 
@@ -305,17 +315,14 @@ var router = express.Router();
 
         //Middleware 1
         fileFilter: function (req, file, cb) {
-
-            // Accept .png, .jpeg, .pdf, .heic
             const allowedTypes = [
                 'image/png',
                 'image/jpeg',
                 'application/pdf',
                 'image/heic'
             ];
-
             if (allowedTypes.includes(file.mimetype)) {
-                cb(null, true); // accept
+                cb(null, true);
             } else {
                 cb(new Error('Only .png, .jpeg, .pdf, or .heic files are allowed!'));
             }
@@ -326,16 +333,13 @@ var router = express.Router();
 
     //middleware 4- the callback function 
     router.post("/upload_receipt", upload.single("receipt"), (req, res) => {
-
-        // `multer` puts file info in `req.file`
+        // req.file is your uploaded file
         if (!req.file) {
             return res.status(400).json({ error: "No file uploaded." });
         }
-
-        // Build file path to return
-        const fileUrl = `/uploads/${req.file.filename}`;
-
-        // Send back file URL to client
+        const month = req.query.month || 'UnknownMonth';
+        const year = req.query.year || 'UnknownYear';
+        const fileUrl = `/uploads/${year}/${month}/${req.file.filename}`;
         res.json({ fileUrl: fileUrl });
     });
 
