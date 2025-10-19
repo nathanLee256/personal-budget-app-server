@@ -11,6 +11,6 @@ module.exports = {
         host: 'localhost',
         database: 'budget_app',
         user: 'nathan_a',
-        password: '(!mySQL)',
+        password: '(!nathan)',
     },
 };
