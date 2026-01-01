@@ -3,6 +3,10 @@ var router = express.Router();
 /* When you require multer, you get a function (multer.()) that you can call with options to configure it. 
 The result is middleware that you can use in your routes to handle file uploads.*/
 const multer = require('multer');
+const path = require('path');
+const { exec } = require('child_process'); // Add this line to import exec
+const { spawn } = require('child_process');
+const fs = require('fs');
 
 /* This line below creates an instance of the multer() middleware function (upload). 
 When a file is uploaded in the client-side code,  upload will automatically handle saving the file to 
@@ -23,7 +27,21 @@ const upload = multer({ dest: 'uploads/' });
         the client (I recall as a JSON object), which displays the transactions in a table.
         
     */
-    router.post('/upload_2', upload.single('file'), (req, res) => {
+
+    /* This function deletes the uploaded file when an error occurs(in route 1). It is called just before the return statements of the 
+    if and catch block of the exec callback which runs when an error occurs executing the python command, script, 
+    or parsing the script output*/
+    function deleteFile(file_path) {
+      fs.unlink(file_path, (err) => {
+        if (err) {
+          console.error(`Error deleting file: ${err.message}`);
+        } else {
+          console.log(`File deleted: ${file_path}`);
+        }
+      });
+    }
+
+    router.post("/upload_2", upload.single('file'), (req, res) => {
       if (!req.file) {
         console.error('No file uploaded');
         return res.status(400).json({ error: 'No file uploaded' });
