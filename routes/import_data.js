@@ -1,5 +1,14 @@
 var express = require('express');
 var router = express.Router();
+/* When you require multer, you get a function (multer.()) that you can call with options to configure it. 
+The result is middleware that you can use in your routes to handle file uploads.*/
+const multer = require('multer');
+
+/* This line below creates an instance of the multer() middleware function (upload). 
+When a file is uploaded in the client-side code,  upload will automatically handle saving the file to 
+the uploads/ directory and generate a unique filename for it. The multer() paramater is an options 
+object which  specifies the folder where the uploaded files should be stored*/
+const upload = multer({ dest: 'uploads/' }); 
 
 
 /* This file contains all server routes which handle requests from the ImportData.js page in the client */
