@@ -19,11 +19,14 @@ const auth = require("../middleware/authorise.js");
 const userRoutes = require('./users.js');       // import users.js
 router.use('/users', userRoutes);            // mount users.js under /users
 
-const giftRoutes = require('./giving_tool.js');       // import giving_tool.js
-router.use('/gifts', giftRoutes);            // mount giving_tool.js under /gifts
+const givingToolRoutes = require('./giving_tool.js');       // import giving_tool.js
+router.use('/giving_tool', givingToolRoutes);            // mount giving_tool.js under /gifts
 
 const worksheetRoutes = require('./worksheet.js'); //import /worksheet.js
 router.use('/worksheet', worksheetRoutes);      // mount worksheet.js under /worksheet
+
+const importDataRoutes = require('./import_data.js');   //import import_data.js
+router.use('/import_data', importDataRoutes);   //mount import_data.js under /import_data
 
 
 /* When you require multer, you get a function (multer.()) that you can call with options to configure it. 
