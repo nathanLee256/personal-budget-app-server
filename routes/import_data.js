@@ -168,6 +168,32 @@ const upload = multer({ dest: 'uploads/' });
     const data = req.body;
     const{ userId, month, year, transactions, newItems } = data;
 
+    //a function to extract the budget_item_id value of each transaction object in the map function below, using its itemName
+    async function FindBItemId(itemName) {
+      try {
+        // Perform the query and store the result in a variable
+        const result = await req.db("current_budget_items")
+          .select("id")
+          .where({
+            item_name: itemName,
+            user_id: userId
+          })
+          .first(); // Assuming there will be only one matching row, we limit the result to the first row.
+
+        // Extract the budget_item_id
+        const budgetItemId = result ? result.id : null;
+
+        // Log the value for debugging
+        console.log("Retrieved budget_item_id:", budgetItemId);
+
+        // Return the value
+        return budgetItemId;
+      } catch (error) {
+        console.error("❌ Database error:", error.message, "\n", error.stack);
+        throw new Error("Internal server error mapping id from item_name");
+      }
+    }
+
     //we will use a nested try-catch block since we need to perform 2 separate SQL operations
 
     try {
@@ -229,7 +255,7 @@ const upload = multer({ dest: 'uploads/' });
           })
 
           //2- select rows where the user may have previously entered a budget item with the same name (shouldn't happen but just to be thorough)
-          let newItemNames = parsedNewItems.map((obj)=> obj.item_name)
+          let newItemNames = parsedNewItems.map((obj)=> obj.item_name);
 
           // Delete only those records for the user and one of the new item names
           await req.db('current_budget_items')
@@ -238,12 +264,14 @@ const upload = multer({ dest: 'uploads/' });
             .del();
 
           //3-  insert the new budget items into 'current_budget_items' table
-          await req.db('current_budget_items').insert(parsedNewItems);
+          // the knex insert () method returns an array of primary keys (of each newly inserted row)-but the table PK must be AI
+          // so after the following line, insertedRows = [23, 24, 25] e.g.
+          const insertedRows = await req.db('current_budget_items').insert(parsedNewItems); 
 
           //construct a message to send back in the JSON of the res object
           const insertItemsMessage = {
             message: "Existing records deleted, new data inserted successfully",
-            insertedRows: newData.length 
+            insertedRows: insertedRows.length 
           }
         }
       } catch (secondErr) { 
@@ -258,13 +286,56 @@ const upload = multer({ dest: 'uploads/' });
         if (transactions.length === 0) {
           return res.status(400).json({ error: "No valid budget items found in request body" });  
         }
+
+        
+
         //then insert transactions (process then insert)
+        const processedTransactions = transactions.map((transObj)=> {
+
+          //prepare an object in which the properties exactly match the user_transactions table columns
+          const processedObj = {
+            user_id: userId,
+            budget_item_id: FindBItemId(transObj.itemName),
+            amount: transObj.Amount,
+            description: transObj.Description,
+            date: transObj.Date
+          }
+
+          return processedObj;
+        })
+
+        //insert
+        const insertedTrans = await req.db('user_transactions').insert(processedTransactions);
+
+        //construct a message to send back in the JSON of the res object
+        const insertTransactionsMessage = {
+          message: "User transactions inserted successfully",
+          insertedRows: insertedTrans.length 
+        }
+
 
       } catch (thirdErr) { 
         console.error('Try 3 failed:', thirdErr);
         const ERROR_TRY_3 = 'Insert Transactions operation failed: ' + thirdErr.message;
         throw new Error(ERROR_TRY_3);   
       }
+
+      //conditionally return the JSON response object
+      if(newItems){
+        res.json({
+          newItems: insertItemsMessage.message,
+          newItemsInserted: insertItemsMessage.insertedRows,
+          newTransactions: insertTransactionsMessage.message,
+          newTransInserted: insertTransactionsMessage.insertedRows
+        });
+      }else{
+        res.json({
+          newTransactions: insertTransactionsMessage.message,
+          newTransInserted: insertTransactionsMessage.insertedRows
+        });
+
+      }
+      
 
     //outer catch 
     } catch (outerErr) {
