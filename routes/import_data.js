@@ -129,18 +129,115 @@ const upload = multer({ dest: 'uploads/' });
   */
   router.post("/save_budget_data", async (req, res) => {
 
-    /*
-      the payload is a JSON object in the following form:
+    //START HELPER FUNCTIONS- here we define a number of helper functions to perform a variety of tasks 
+      //HELPER 1- checks if there is a userId value in the req.body. Throws an error to the catch-block if it doesn't
+      // also checks the month and year params
+        function validatePayload(userID, mnth, yr) {
+          if (!userID) {
+            throw new Error("Missing user_id in request body.");
+          }
+          if (!mnth) {
+            throw new Error("Missing month in request body.");
+          }
+          if (!yr) {
+            throw new Error("Missing year in request body.");
+          }
+        }
+      //END HELPER 1
 
-      const payload = {
-        userId: userId,
-        month: selectedMonth,
-        year: selectedYear,
-        transactions: parsedPayload,
-        newItems: newBudgetItems
-      };
+      //HELPER 2- async function which transforms each object in the newItems array into an object with properties that match the columns from
+      // the 'current_budget_items' table that the new budget item values are then inserted into. 
+      /*
+        newBItems is expected to be an array of objects in the following form: 
+        { 
+          item: "Christmas Gifts", 
+          amount: 0, 
+          frequency: "", 
+          total: 0,
+          primaryCat: "Expenditure",
+          secondaryCat: "Giving",
+          tertiaryCat: "Giving"  
+        }
+       
+      */
+        async function insertNewBudgetItems(newBItems, userID) {
+          //first check if newBItems is truthy
+          if (!Array.isArray(newBItems) || newBItems.length === 0) {
+            throw new Error("No new budget items provided for insertion.");
+          }
+          //then process the array of objects 
+          
+            const parsedNewItems = newBItems.map((obj) => ({
+              user_id: userID,
+              primary_category: obj.primaryCat,
+              secondary_category: obj.secondaryCat,
+              tertiary_category: obj.tertiaryCat,
+              item_name: obj.item,
+              current_amount: obj.amount,
+              frequency: obj.frequency,
+            }));
+            //extract the names of each new budget item from each object into an array of names
+            const newItemNames = parsedNewItems.map((obj) => obj.item_name);
 
-      payload.transactions is an array of objects in the following form:
+            //if there are any existing items in the table where the current user has already created an item with the same name, delete them
+            await req.db("current_budget_items")
+              .where({ user_id: userID })
+              .whereIn("item_name", newItemNames)
+              .del();
+
+            //then insert new items
+            const insertedRows = await req.db("current_budget_items").insert(parsedNewItems);
+
+            // If no rows were inserted, throw an error to be caught by the catch block of the client code
+            if (!insertedRows || insertedRows.length === 0) {
+              throw new Error("Failed to insert new budget items.");
+            }
+
+            return {
+              message: "Existing records deleted, new data inserted successfully",
+              insertedRows: insertedRows.length,
+            };
+          
+        }
+      //END HELPER 2
+
+      //START HELPER 3- a function to extract the budget_item_id value of each transaction object in the map function below, using its itemName
+        async function FindBItemId(bItemName, userId) {
+          try {
+            // Perform the query and store the result in a variable
+            const result = await req.db("current_budget_items")
+              .select("id")
+              .where({
+                item_name: bItemName,
+                user_id: userId
+              })
+              .first(); // Assuming there will be only one matching row, we limit the result to the first row.
+
+            // Extract the budget_item_id
+            const budgetItemId = result ? result.id : null;
+            
+            //throw an error if no matching budget item was found for the given itemName
+            if (!budgetItemId) {
+              throw new Error(`Budget item not found for itemName: ${bItemName}`);
+            }
+            
+            // Log the value for debugging
+            console.log("Retrieved budget_item_id:", budgetItemId);
+
+            // Return the value
+            return budgetItemId;
+          } catch (error) {
+            console.error("❌ Database error:", error.message, "\n", error.stack);
+            throw new Error("Internal server error mapping id from item_name");
+          }
+        }
+
+      //END HELPER 3
+
+      //START HELPER 4 - async function which  inserts the uploaded trnasactions into the db- to do this we call another async helper function
+      // from within the Promise.all()
+      /* 
+        transacts is expected to be an array of objects in the following form:
       
         {
           id: 2,
@@ -150,208 +247,91 @@ const upload = multer({ dest: 'uploads/' });
           Amount: 1149.59,
           itemName: "Salary"
         }
+      */
+        // Transactions processing as a helper function
+        async function processInsertTransactions(transacts, userID) {
+          //first check if transacts is truthy and an array
+          if (!Array.isArray(transacts) || transacts.length === 0) {
+            throw new Error("No valid budget items found in request body");
+          }
+          //then process transactions
+          const processedTransactions = await Promise.all(
+            transacts.map(async (transObj) => ({
+              user_id: userID,
+              budget_item_id: await FindBItemId(transObj.itemName, userID),
+              amount: transObj.Amount,
+              description: transObj.Description,
+              date: new Date(transObj.Date).toISOString().slice(0, 10), // Format YYYY-MM-DD,
+            }))
+          );
 
-      payload.newItems is an array of objects in the following form: { 
-        item: "Christmas Gifts", 
-        amount: 0, 
-        frequency: "", 
-        total: 0,
-        primaryCat: "Expenditure",
-        secondaryCat: "Giving",
-        tertiaryCat: "Giving"  
-      }
+          const insertedTrans = await req.db("user_transactions").insert(processedTransactions);
+
+          // If no rows were inserted, throw an error to be caught by the catch block of the client code
+          if (!insertedTrans || insertedTrans.length === 0) {
+            throw new Error("Failed to insert new transactions.");
+          }
+
+          return {
+            message: "User transactions inserted successfully",
+            insertedRows: insertedTrans.length,
+          };
+        }
+
+      //END HELPER 4
 
 
-    */
+    //END HELPER FUNCTIONS
 
-    //destructure payload
-    const data = req.body;
-    const{ userId, month, year, transactions, newItems } = data;
+    //ROUTE CLIENT CODE
+      // first destructure payload- expected to be an object in the following form
+      /* 
+        {
+          userId: userId,
+          month: selectedMonth,
+          year: selectedYear,
+          transactions: parsedPayload,
+          newItems: newBudgetItems
+        };
+      */
+      const data = req.body;
+      const{ userId, month, year, transactions, newItems } = data;
 
-    //a function to extract the budget_item_id value of each transaction object in the map function below, using its itemName
-    async function FindBItemId(itemName) {
+      //then use 1 try-catch block which calls the helpder functions to perform the unique tasks
       try {
-        // Perform the query and store the result in a variable
-        const result = await req.db("current_budget_items")
-          .select("id")
-          .where({
-            item_name: itemName,
-            user_id: userId
-          })
-          .first(); // Assuming there will be only one matching row, we limit the result to the first row.
+        // Task 1: Validate User ID
+        validatePayload(userId, month, year);
 
-        // Extract the budget_item_id
-        const budgetItemId = result ? result.id : null;
+        // Task 2: Insert new budget items (if applicable)
+        let insertItemsMessage = null;
+        if (newItems) {
+          insertItemsMessage = await insertNewBudgetItems(newItems, userId);
+        }
 
-        // Log the value for debugging
-        console.log("Retrieved budget_item_id:", budgetItemId);
+        // Task 3: Process and insert transactions
+        const insertTransactionsMessage = await processInsertTransactions(transactions, userId);
 
-        // Return the value
-        return budgetItemId;
+        // Send the success response
+        res.json({
+          ...(insertItemsMessage && {
+            newItems: insertItemsMessage.message,
+            newItemsInserted: insertItemsMessage.insertedRows,
+          }),
+          newTransactions: insertTransactionsMessage.message,
+          newTransInserted: insertTransactionsMessage.insertedRows,
+        });
       } catch (error) {
-        console.error("❌ Database error:", error.message, "\n", error.stack);
-        throw new Error("Internal server error mapping id from item_name");
+        console.error("❌ Route failure:", error.message);
+        res.status(500).json({ error: "Internal server error: " + error.message });
       }
-    }
-
-    //we will use a nested try-catch block since we need to perform 2 separate SQL operations
-
-    try {
-
-      //try 1
-      try {
-        //check the userId first
-        if(!userId){
-          throw new Error("Missing user_id in request body");
-        }
-
-      } catch (firstErr) { 
-          /* 
-              firstErr is the error object created when and error occured in the first inner try. It is either assigned:
-              1- An empty string if no message was provided in the inner try (e.g., throw new Error())
-              2- or a standard JS error message as its .message (when a standard error occurs e.g., "Cannot read property 'x' of undefined")
-          */
-          
-          //log the .message of the firstErr to the console for debugging
-          console.error('Try 1 failed:', firstErr);
-
-          //create a custom error message for the inner try
-          const ERROR_TRY_1 = 'failure in try 1: ' + firstErr.message
-
-          //create and throw a new Error object (with the custom message) to be caught by the outer catch
-          throw new Error(ERROR_TRY_1);   
-      }
-      //try 2
-      try {
-        // insert new budget items
-        if(Array.isArray(newItems) && newItems.length > 0){
-          /*  
-          1- process objects in newItems array. Each object needs to be in the following form:
-          {
-            user_id: userId, 
-            primary_category: primaryCategory, 
-            secondary_category: formattedSecondaryCategory,
-            tertiary_category: formattedTertiaryCategory,  // Correct ENUM value
-            item_name: obj.item,
-            current_amount: obj.amount,
-            frequency: obj.frequency,
-          }
-        
-          */
-          const parsedNewItems = newItems.map((obj)=>{
-
-            //prepare and return a new object
-            const processedObj = {
-              user_id: userId, 
-              primary_category: obj.primaryCat, 
-              secondary_category: obj.secondaryCat,
-              tertiary_category: obj.tertiaryCat,  
-              item_name: obj.item,
-              current_amount: obj.amount,
-              frequency: obj.frequency,
-            };
-            return processedObj;
-
-          })
-
-          //2- select rows where the user may have previously entered a budget item with the same name (shouldn't happen but just to be thorough)
-          let newItemNames = parsedNewItems.map((obj)=> obj.item_name);
-
-          // Delete only those records for the user and one of the new item names
-          await req.db('current_budget_items')
-            .where({ user_id: userId })
-            .whereIn('item_name', newItemNames)
-            .del();
-
-          //3-  insert the new budget items into 'current_budget_items' table
-          // the knex insert () method returns an array of primary keys (of each newly inserted row)-but the table PK must be AI
-          // so after the following line, insertedRows = [23, 24, 25] e.g.
-          const insertedRows = await req.db('current_budget_items').insert(parsedNewItems); 
-
-          //construct a message to send back in the JSON of the res object
-          const insertItemsMessage = {
-            message: "Existing records deleted, new data inserted successfully",
-            insertedRows: insertedRows.length 
-          }
-        }
-      } catch (secondErr) { 
-        console.error('Try 2 failed:', secondErr);
-        const ERROR_TRY_2 = 'Insert Budget Item operation failed: ' + secondErr.message;
-        throw new Error(ERROR_TRY_2);   
-      }
-
-      //try 3
-      try {
-        //first check the transactions prop from the payload
-        if (transactions.length === 0) {
-          return res.status(400).json({ error: "No valid budget items found in request body" });  
-        }
-
-        
-
-        //then insert transactions (process then insert)
-        const processedTransactions = transactions.map((transObj)=> {
-
-          //prepare an object in which the properties exactly match the user_transactions table columns
-          const processedObj = {
-            user_id: userId,
-            budget_item_id: FindBItemId(transObj.itemName),
-            amount: transObj.Amount,
-            description: transObj.Description,
-            date: transObj.Date
-          }
-
-          return processedObj;
-        })
-
-        //insert
-        const insertedTrans = await req.db('user_transactions').insert(processedTransactions);
-
-        //construct a message to send back in the JSON of the res object
-        const insertTransactionsMessage = {
-          message: "User transactions inserted successfully",
-          insertedRows: insertedTrans.length 
-        }
-
-
-      } catch (thirdErr) { 
-        console.error('Try 3 failed:', thirdErr);
-        const ERROR_TRY_3 = 'Insert Transactions operation failed: ' + thirdErr.message;
-        throw new Error(ERROR_TRY_3);   
-      }
-
-      //conditionally return the JSON response object
-      if(newItems){
-        res.json({
-          newItems: insertItemsMessage.message,
-          newItemsInserted: insertItemsMessage.insertedRows,
-          newTransactions: insertTransactionsMessage.message,
-          newTransInserted: insertTransactionsMessage.insertedRows
-        });
-      }else{
-        res.json({
-          newTransactions: insertTransactionsMessage.message,
-          newTransInserted: insertTransactionsMessage.insertedRows
-        });
-
-      }
-      
-
-    //outer catch 
-    } catch (outerErr) {
-        //outerErr will be the error object thrown from one of the inner try blocks. It will contain the custom message we assigned to it in the inner catch
-        // then we create the error message to send back to client by concatentating the error messages from the inner try with some additional text
-        const FINAL_ERROR = 'Error occurred due to' + outerErr;
-
-        //and just log the outerErr.message to the console to indicate where the error occured
-        console.error(FINAL_ERROR); //e.g. "Error occurred due to failure in try 1: Cannot read property 'x' of undefined "
-
-        //finally handle error however your app needs
-        res.status(500).json({ error: FINAL_ERROR });
-    } 
+    //END CLIENT CODE
   });
+    
 //END ROUTE 2
 
+    
+
+    
 
 // Export the router for use in other parts of the application
 module.exports = router;
