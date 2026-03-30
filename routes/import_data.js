@@ -179,13 +179,13 @@ const upload = multer({ dest: 'uploads/' });
             //extract the names of each new budget item from each object into an array of names
             const newItemNames = parsedNewItems.map((obj) => obj.item_name);
 
-            //if there are any existing items in the table where the current user has already created an item with the same name, delete them
+            //if there are any existing items in the table where the current user has already created an item with the same name, delete them (this code is likely redundant)
             await req.db("current_budget_items")
               .where({ user_id: userID })
               .whereIn("item_name", newItemNames)
               .del();
 
-            //then insert new items
+            //then insert new items (insert new budget items in the "current_budget_items" table)
             const insertedRows = await req.db("current_budget_items").insert(parsedNewItems);
 
             // If no rows were inserted, throw an error to be caught by the catch block of the client code
