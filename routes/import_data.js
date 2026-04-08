@@ -121,10 +121,89 @@ const upload = multer({ dest: 'uploads/' });
 
 //START ROUTE 2
   /*
+    This route handles POST requests which are triggered when the user clicks the 'Save Budget Data' button on the 
+    ImportData.js page, after uploading and categorising their transactions. The code that needs to run here in this route, 
+    will perform a simple query to the db to check if the user has previously saved budget data for the selected month/year.
+    This endpoint will return a bool to indicate yes/no.
+  */
+
+  //HELPER 1- checks if there is a userId value in the req.body. Throws an error to the catch-block if it doesn't
+    // also checks the month and year params
+      function validatePayload(userID, mnth, yr) {
+        if (!userID) {
+          throw new Error("Missing user_id in request body.");
+        }
+        if (!mnth) {
+          throw new Error("Missing month in request body.");
+        }
+        if (!yr) {
+          throw new Error("Missing year in request body.");
+        }
+      }
+  //END HELPER 1
+  router.post("/check_for_prev_entries", async (req, res) => {
+
+    //ROUTE CLIENT CODE
+      // first destructure payload- expected to be an object in the following form
+      /* 
+        {
+          userId: userId,
+          month: selectedMonth,
+          year: selectedYear,
+        };
+      */
+      const data = req.body;
+      const { userId, month, year } = data;
+      const ZERO = 0;
+
+      try{
+        // Task 0: Validate User ID
+        validatePayload(userId, month, year);
+
+        //Task 1: check if user has previously submitted data for selected month/year
+
+        /* 
+            Q2: select and return all rows from user_transactions table 
+            SELECT * FROM user_transactions
+
+            WHERE userId = user_id
+              
+              AND MONTH(date) = month
+
+              AND YEAR(date) = year;
+        */
+
+        //Q2 resolves (successfully) to an array of data objects (transaction objects)
+        const transObjects = await req.db
+          .from("user_transactions")
+          .where("user_transactions.user_id", userId)
+          .andWhereRaw("MONTH(user_transactions.date) = ?", [month])
+          .andWhereRaw("YEAR(user_transactions.date) = ?", [year])
+          .select('*');
+
+        //check returned objects
+        let returnBool = Array.isArray(transObjects) && transObjects.length === ZERO;
+
+        //return the simple payload
+        const payload = { newSubmission : returnBool};
+        res.json(payload);
+
+      } catch(err){
+        console.error('Error occurred in user_transactions select SQL query:', err);
+        res.status(500).json({ error: 'Something went wrong while processing your request.' });
+      }
+  });
+//END ROUTE 2
+
+
+
+//START ROUTE 3
+  /*
       This is the server route for handling POST requests from the event handler function of the 
       'Save Budget Data' Button within the JSX of the <ImportData/> page. This button is located at the 
       bottom of the table which displays the list of user transactions for a selected month. It is enabled
-      when the user has selected a budget item category for each transaction in the table. 
+      when the user has selected a budget item category for each transaction in the table. PS update: this route will now
+      actually handle POST requests from the modal associated with the 'Save Budget Data' button.
   
   */
   router.post("/save_budget_data", async (req, res) => {
@@ -299,8 +378,11 @@ const upload = multer({ dest: 'uploads/' });
 
       //then use 1 try-catch block which calls the helpder functions to perform the unique tasks
       try {
-        // Task 1: Validate User ID
+        // Task 0: Validate User ID
         validatePayload(userId, month, year);
+
+        //Task 1: check if user has previously submitted data for selected month/year
+
 
         // Task 2: Insert new budget items (if applicable)
         let insertItemsMessage = null;
@@ -327,7 +409,7 @@ const upload = multer({ dest: 'uploads/' });
     //END CLIENT CODE
   });
     
-//END ROUTE 2
+//END ROUTE 3
 
     
 
