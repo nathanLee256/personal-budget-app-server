@@ -163,14 +163,14 @@ const upload = multer({ dest: 'uploads/' });
         //Task 1: check if user has previously submitted data for selected month/year
 
         /* 
-            Q2: select and return all rows from user_transactions table 
-            SELECT * FROM user_transactions
+          Q2: select and return all rows from user_transactions table 
+          SELECT * FROM user_transactions
 
-            WHERE userId = user_id
-              
-              AND MONTH(date) = month
+          WHERE userId = user_id
+            
+            AND MONTH(date) = month
 
-              AND YEAR(date) = year;
+            AND YEAR(date) = year;
         */
 
         //Q2 resolves (successfully) to an array of data objects (transaction objects)
