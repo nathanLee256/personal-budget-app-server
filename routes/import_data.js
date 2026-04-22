@@ -239,7 +239,7 @@ const upload = multer({ dest: 'uploads/' });
         }
        
       */
-        async function insertNewBudgetItems(newBItems, userID) {
+        async function insertNewBudgetItems(newBItems, userID, trx) {
           //first check if newBItems is truthy
           if (!Array.isArray(newBItems) || newBItems.length === 0) {
             throw new Error("No new budget items provided for insertion.");
@@ -259,13 +259,13 @@ const upload = multer({ dest: 'uploads/' });
             const newItemNames = parsedNewItems.map((obj) => obj.item_name);
 
             //if there are any existing items in the table where the current user has already created an item with the same name, delete them (this code is likely redundant)
-            await req.db("current_budget_items")
+            await trx("current_budget_items") //use trx instead of req.db
               .where({ user_id: userID })
               .whereIn("item_name", newItemNames)
               .del();
 
             //then insert new items (insert new budget items in the "current_budget_items" table)
-            const insertedRows = await req.db("current_budget_items").insert(parsedNewItems);
+            const insertedRows = await trx("current_budget_items").insert(parsedNewItems);
 
             // If no rows were inserted, throw an error to be caught by the catch block of the client code
             if (!insertedRows || insertedRows.length === 0) {
@@ -281,10 +281,10 @@ const upload = multer({ dest: 'uploads/' });
       //END HELPER 2
 
       //START HELPER 3- a function to extract the budget_item_id value of each transaction object in the map function below, using its itemName
-        async function FindBItemId(bItemName, userId) {
+        async function FindBItemId(bItemName, userId, trx) {
           try {
             // Perform the query and store the result in a variable
-            const result = await req.db("current_budget_items")
+            const result = await trx("current_budget_items") //use trx instead of req.db
               .select("id")
               .where({
                 item_name: bItemName,
@@ -328,7 +328,7 @@ const upload = multer({ dest: 'uploads/' });
         }
       */
         // Transactions processing as a helper function
-        async function processInsertTransactions(transacts, userID) {
+        async function processInsertTransactions(transacts, userID, trx) {
           //first check if transacts is truthy and an array
           if (!Array.isArray(transacts) || transacts.length === 0) {
             throw new Error("No valid budget items found in request body");
@@ -337,14 +337,14 @@ const upload = multer({ dest: 'uploads/' });
           const processedTransactions = await Promise.all(
             transacts.map(async (transObj) => ({
               user_id: userID,
-              budget_item_id: await FindBItemId(transObj.itemName, userID),
+              budget_item_id: await FindBItemId(transObj.itemName, userID, trx),
               amount: transObj.Amount,
               description: transObj.Description,
-              date: new Date(transObj.Date).toISOString().slice(0, 10), // Format YYYY-MM-DD,
+              date: transObj.Date.split('/').reverse().join('-')
             }))
           );
 
-          const insertedTrans = await req.db("user_transactions").insert(processedTransactions);
+          const insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
 
           // If no rows were inserted, throw an error to be caught by the catch block of the client code
           if (!insertedTrans || insertedTrans.length === 0) {
@@ -374,35 +374,46 @@ const upload = multer({ dest: 'uploads/' });
         };
       */
       const data = req.body;
-      const{ userId, month, year, transactions, newItems } = data;
+      const{ userId, month, year, transactions, newItems, toDo } = data;
+
+      //check the data
+      console.log(`data check: ${data}`);
 
       //then use 1 try-catch block which calls the helpder functions to perform the unique tasks
       try {
         // Task 0: Validate User ID
         validatePayload(userId, month, year);
 
-        //Task 1: check if user has previously submitted data for selected month/year
+        // enclose the 2 db operations within a req.db.transaction callback function which ensures that if there is an error
+        // with one of the operations, the other operation (if applicable) will also be reversed (and all affected db tables)
+        // will be reset to their previous state
+        await req.db.transaction(async (trx) => {
 
+          // Task 1: Insert new budget items (if applicable)
+          let insertItemsMessage = null;
+          if (newItems) {
+            insertItemsMessage = await insertNewBudgetItems(newItems, userId, trx); //pass in the trx object aswell
+          }
 
-        // Task 2: Insert new budget items (if applicable)
-        let insertItemsMessage = null;
-        if (newItems) {
-          insertItemsMessage = await insertNewBudgetItems(newItems, userId);
-        }
+          // Task 2: Process and insert transactions
+          const insertTransactionsMessage = await processInsertTransactions(transactions, userId, trx); //pass in trx
 
-        // Task 3: Process and insert transactions
-        const insertTransactionsMessage = await processInsertTransactions(transactions, userId);
+          // If the code reaches here without errors, Knex automatically COMMITS the changes
+          // Send the success response
+          res.json({
+            ...(insertItemsMessage && {
+              newItems: insertItemsMessage.message,
+              newItemsInserted: insertItemsMessage.insertedRows,
+            }),
+            newTransactions: insertTransactionsMessage.message,
+            newTransInserted: insertTransactionsMessage.insertedRows,
+          });
 
-        // Send the success response
-        res.json({
-          ...(insertItemsMessage && {
-            newItems: insertItemsMessage.message,
-            newItemsInserted: insertItemsMessage.insertedRows,
-          }),
-          newTransactions: insertTransactionsMessage.message,
-          newTransInserted: insertTransactionsMessage.insertedRows,
         });
+
       } catch (error) {
+        // If an error happens anywhere inside the transaction block, 
+        // Knex automatically ROLLS BACK everything. No data is saved.
         console.error("❌ Route failure:", error.message);
         res.status(500).json({ error: "Internal server error: " + error.message });
       }
