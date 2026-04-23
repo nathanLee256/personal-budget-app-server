@@ -328,7 +328,7 @@ const upload = multer({ dest: 'uploads/' });
         }
       */
         // Transactions processing as a helper function
-        async function processInsertTransactions(transacts, userID, trx) {
+        async function processInsertTransactions(transacts, userID, trx, instructions) {
           //first check if transacts is truthy and an array
           if (!Array.isArray(transacts) || transacts.length === 0) {
             throw new Error("No valid budget items found in request body");
@@ -344,7 +344,19 @@ const upload = multer({ dest: 'uploads/' });
             }))
           );
 
-          const insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+          //perform the insert operation depending on user instruction
+          if(instructions === "Overwrite"){
+            //first delete all transactions in table for the userID, month, year values
+
+            //then insert new transactions
+            const insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+
+          } else{
+            //simply append new transactions to what is already in table
+            const insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+          }
+
+          
 
           // If no rows were inserted, throw an error to be caught by the catch block of the client code
           if (!insertedTrans || insertedTrans.length === 0) {
@@ -396,7 +408,7 @@ const upload = multer({ dest: 'uploads/' });
           }
 
           // Task 2: Process and insert transactions
-          const insertTransactionsMessage = await processInsertTransactions(transactions, userId, trx); //pass in trx
+          const insertTransactionsMessage = await processInsertTransactions(transactions, userId, trx, toDo); //pass in trx
 
           // If the code reaches here without errors, Knex automatically COMMITS the changes
           // Send the success response
