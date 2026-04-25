@@ -156,6 +156,13 @@ const upload = multer({ dest: 'uploads/' });
       const { userId, month, year } = data;
       const ZERO = 0;
 
+      const monthMap = {
+        "January": 1, "February": 2, "March": 3, "April": 4,
+        "May": 5, "June": 6, "July": 7, "August": 8,
+        "September": 9, "October": 10, "November": 11, "December": 12
+      };
+
+
       try{
         // Task 0: Validate User ID
         validatePayload(userId, month, year);
@@ -172,20 +179,32 @@ const upload = multer({ dest: 'uploads/' });
 
             AND YEAR(date) = year;
         */
+        // 1. Force the conversions
+        const numericUID = parseInt(userId, 10);  //explicitly convert the userId value to an int, 10 to match the db
+        const numericMonth = monthMap[month];     // convert the month to an int
+        const numericYear = parseInt(year, 10);   // and year to an int
+
+        console.log(`QUERY PARAMS -> UID: ${numericUID} (${typeof numericUID}), Month: ${numericMonth} (${typeof numericMonth}), Year: ${numericYear} (${typeof numericYear})`);
+        
 
         //Q2 resolves (successfully) to an array of data objects (transaction objects)
         const transObjects = await req.db
           .from("user_transactions")
-          .where("user_transactions.user_id", userId)
-          .andWhereRaw("MONTH(user_transactions.date) = ?", [month])
-          .andWhereRaw("YEAR(user_transactions.date) = ?", [year])
+          .where("user_transactions.user_id", numericUID)
+          .andWhereRaw("MONTH(user_transactions.date) = ?", [numericMonth])
+          .andWhereRaw("YEAR(user_transactions.date) = ?", [numericYear])
           .select('*');
 
+        console.log('Query result length:', transObjects.length);
+
         //check returned objects
-        let returnBool = Array.isArray(transObjects) && transObjects.length === ZERO;
+        // If length is 0, newSubmission is true. 
+        // If length > 0, newSubmission is false.
+        const returnBool = transObjects.length === 0;
+        
 
         //return the simple payload
-        const payload = { newSubmission : returnBool};
+        const payload = { newSubmission : returnBool };
         res.json(payload);
 
       } catch(err){
@@ -211,14 +230,17 @@ const upload = multer({ dest: 'uploads/' });
     //START HELPER FUNCTIONS- here we define a number of helper functions to perform a variety of tasks 
       //HELPER 1- checks if there is a userId value in the req.body. Throws an error to the catch-block if it doesn't
       // also checks the month and year params
-        function validatePayload(userID, mnth, yr) {
-          if (!userID) {
+        function validatePayload(dataCopy) {
+
+          //destructure the payload
+          const{ userId, month, year, transactions } = dataCopy;
+          if (!userId) {
             throw new Error("Missing user_id in request body.");
           }
-          if (!mnth) {
+          if (!month) {
             throw new Error("Missing month in request body.");
           }
-          if (!yr) {
+          if (!year) {
             throw new Error("Missing year in request body.");
           }
         }
@@ -239,15 +261,18 @@ const upload = multer({ dest: 'uploads/' });
         }
        
       */
-        async function insertNewBudgetItems(newBItems, userID, trx) {
+        async function insertNewBudgetItems(trx, dataCopy) {
+
+          //destructure th payload
+          const{ userId, newItems } = dataCopy;
           //first check if newBItems is truthy
-          if (!Array.isArray(newBItems) || newBItems.length === 0) {
+          if (!Array.isArray(newItems) || newItems.length === 0) {
             throw new Error("No new budget items provided for insertion.");
           }
           //then process the array of objects 
           
-            const parsedNewItems = newBItems.map((obj) => ({
-              user_id: userID,
+            const parsedNewItems = newItems.map((obj) => ({
+              user_id: userId,
               primary_category: obj.primaryCat,
               secondary_category: obj.secondaryCat,
               tertiary_category: obj.tertiaryCat,
@@ -260,7 +285,7 @@ const upload = multer({ dest: 'uploads/' });
 
             //if there are any existing items in the table where the current user has already created an item with the same name, delete them (this code is likely redundant)
             await trx("current_budget_items") //use trx instead of req.db
-              .where({ user_id: userID })
+              .where({ user_id: userId })
               .whereIn("item_name", newItemNames)
               .del();
 
@@ -274,7 +299,7 @@ const upload = multer({ dest: 'uploads/' });
 
             return {
               message: "Existing records deleted, new data inserted successfully",
-              insertedRows: insertedRows.length,
+              insertedRows: parsedNewItems.length,
             };
           
         }
@@ -328,16 +353,21 @@ const upload = multer({ dest: 'uploads/' });
         }
       */
         // Transactions processing as a helper function
-        async function processInsertTransactions(transacts, userID, trx, instructions) {
+        async function processInsertTransactions(trx, dataObj) {
+
+          //destructure the payload obj (I think its better to do this within the helper functions)
+          const{ userId, month, year, transactions, toDo } = dataObj;
+
+
           //first check if transacts is truthy and an array
-          if (!Array.isArray(transacts) || transacts.length === 0) {
+          if (!Array.isArray(transactions) || transactions.length === 0) {
             throw new Error("No valid budget items found in request body");
           }
           //then process transactions
           const processedTransactions = await Promise.all(
-            transacts.map(async (transObj) => ({
-              user_id: userID,
-              budget_item_id: await FindBItemId(transObj.itemName, userID, trx),
+            transactions.map(async (transObj) => ({
+              user_id: userId,
+              budget_item_id: await FindBItemId(transObj.itemName, userId, trx),
               amount: transObj.Amount,
               description: transObj.Description,
               date: transObj.Date.split('/').reverse().join('-')
@@ -345,15 +375,24 @@ const upload = multer({ dest: 'uploads/' });
           );
 
           //perform the insert operation depending on user instruction
-          if(instructions === "Overwrite"){
+          let insertedTrans ; //will be assigned an array after successful insert operation
+          if(toDo === "Overwrite"){
             //first delete all transactions in table for the userID, month, year values
+            //query resolves (successfully) to an int representing the number of data objects (transaction objects) deleted
+            const transObjects = await trx
+              .from("user_transactions")
+              .where("user_transactions.user_id", userId)
+              .andWhereRaw("MONTH(user_transactions.date) = ?", [month])
+              .andWhereRaw("YEAR(user_transactions.date) = ?", [year])
+              .del('*');
 
             //then insert new transactions
-            const insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+            //returns an array of one element, which is the auto_increment ID of that row (e.g., [101]).
+            insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
 
           } else{
             //simply append new transactions to what is already in table
-            const insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+            insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
           }
 
           
@@ -365,7 +404,7 @@ const upload = multer({ dest: 'uploads/' });
 
           return {
             message: "User transactions inserted successfully",
-            insertedRows: insertedTrans.length,
+            insertedRows: processedTransactions.length
           };
         }
 
@@ -386,7 +425,8 @@ const upload = multer({ dest: 'uploads/' });
         };
       */
       const data = req.body;
-      const{ userId, month, year, transactions, newItems, toDo } = data;
+      const{ newItems } = data;
+      console.log("Check newItems:", newItems);
 
       //check the data
       console.log(`data check: ${data}`);
@@ -394,7 +434,7 @@ const upload = multer({ dest: 'uploads/' });
       //then use 1 try-catch block which calls the helpder functions to perform the unique tasks
       try {
         // Task 0: Validate User ID
-        validatePayload(userId, month, year);
+        validatePayload(data);
 
         // enclose the 2 db operations within a req.db.transaction callback function which ensures that if there is an error
         // with one of the operations, the other operation (if applicable) will also be reversed (and all affected db tables)
@@ -403,12 +443,12 @@ const upload = multer({ dest: 'uploads/' });
 
           // Task 1: Insert new budget items (if applicable)
           let insertItemsMessage = null;
-          if (newItems) {
-            insertItemsMessage = await insertNewBudgetItems(newItems, userId, trx); //pass in the trx object aswell
+          if (Array.isArray(newItems) && newItems.length > 0) {
+            insertItemsMessage = await insertNewBudgetItems(trx, data); //pass in the trx object aswell
           }
 
           // Task 2: Process and insert transactions
-          const insertTransactionsMessage = await processInsertTransactions(transactions, userId, trx, toDo); //pass in trx
+          const insertTransactionsMessage = await processInsertTransactions(trx, data); //pass in trx
 
           // If the code reaches here without errors, Knex automatically COMMITS the changes
           // Send the success response
