@@ -290,7 +290,17 @@ const upload = multer({ dest: 'uploads/' });
               .del();
 
             //then insert new items (insert new budget items in the "current_budget_items" table)
-            const insertedRows = await trx("current_budget_items").insert(parsedNewItems);
+            // this code assigns an array containing the ID of the first inserted row (e.g., [150]), to the variable
+            // rather than an array of the full data objects.
+            let insertedRows;
+            insertedRows = await trx("current_budget_items").insert(parsedNewItems);
+
+            //so we have to add an additional query to extract the newly inserted rows
+            // this code (if successful) assigns an array of data objects to the variable
+            insertedRows = await trx("current_budget_items")
+              .where({ user_id: userId })
+              .whereIn("item_name", newItemNames)
+              .select("*");
 
             // If no rows were inserted, throw an error to be caught by the catch block of the client code
             if (!insertedRows || insertedRows.length === 0) {
@@ -299,7 +309,7 @@ const upload = multer({ dest: 'uploads/' });
 
             return {
               message: "Existing records deleted, new data inserted successfully",
-              insertedRows: parsedNewItems.length,
+              insertedRows: insertedRows,
             };
           
         }
@@ -388,11 +398,26 @@ const upload = multer({ dest: 'uploads/' });
 
             //then insert new transactions
             //returns an array of one element, which is the auto_increment ID of that row (e.g., [101]).
-            insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+            const firstObjID = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+
+            const lastObjID = firstObjID[0] + processedTransactions.length - 1;  //e.g. 40 = 33 + 7
+
+            //now query to return the newly inserted transactions and assign them to the variable
+            insertedTrans = await trx("user_transactions")
+              .whereBetween('transaction_id', [firstObjID, lastObjID]) 
+              .andWhere({ user_id : userId })
+              .select("*");
+
 
           } else{
             //simply append new transactions to what is already in table
             insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+
+            //now query to return the newly inserted transactions and assign them to the variable
+            insertedTrans = await trx("user_transactions")
+              .whereBetween('transaction_id', [firstObjID, lastObjID]) 
+              .andWhere({ user_id : userId })
+              .select("*");
           }
 
           
@@ -404,7 +429,7 @@ const upload = multer({ dest: 'uploads/' });
 
           return {
             message: "User transactions inserted successfully",
-            insertedRows: processedTransactions.length
+            insertedTrans : insertedTrans
           };
         }
 
@@ -442,23 +467,30 @@ const upload = multer({ dest: 'uploads/' });
         await req.db.transaction(async (trx) => {
 
           // Task 1: Insert new budget items (if applicable)
-          let insertItemsMessage = null;
+          let insertedItems = null;
           if (Array.isArray(newItems) && newItems.length > 0) {
-            insertItemsMessage = await insertNewBudgetItems(trx, data); //pass in the trx object aswell
+            insertedItems = await insertNewBudgetItems(trx, data); //pass in the trx object aswell
           }
+          //if the above code runs successfully, insertItemsMessage will be an obj in the following form:
+          /* 
+            {
+              message: "Existing records deleted, new data inserted successfully",
+              insertedRows: insertedRows,
+            }
+          */
 
           // Task 2: Process and insert transactions
-          const insertTransactionsMessage = await processInsertTransactions(trx, data); //pass in trx
+          const insertedTransactions = await processInsertTransactions(trx, data); //pass in trx
 
           // If the code reaches here without errors, Knex automatically COMMITS the changes
           // Send the success response
           res.json({
-            ...(insertItemsMessage && {
-              newItems: insertItemsMessage.message,
-              newItemsInserted: insertItemsMessage.insertedRows,
+            ...(insertedItems && {
+              newItems: insertedItems.message,
+              newItemsInserted: insertedItems.insertedRows,
             }),
-            newTransactions: insertTransactionsMessage.message,
-            newTransInserted: insertTransactionsMessage.insertedRows,
+            newTransactions: insertedTransactions.message,
+            newTransInserted: insertedTransactions.insertedTrans,
           });
 
         });
