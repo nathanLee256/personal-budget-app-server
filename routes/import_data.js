@@ -404,20 +404,45 @@ const upload = multer({ dest: 'uploads/' });
 
             //now query to return the newly inserted transactions and assign them to the variable
             insertedTrans = await trx("user_transactions")
-              .whereBetween('transaction_id', [firstObjID, lastObjID]) 
-              .andWhere({ user_id : userId })
-              .select("*");
+              .leftJoin("current_budget_items", "user_transactions.budget_item_id", "=", "current_budget_items.id")
+              .whereBetween('user_transactions.transaction_id', [firstObjID, lastObjID]) 
+              .andWhere({ "user_transactions.user_id" : userId })
+              .select({
+                "Transaction ID": "user_transactions.transaction_id",
+                "Amount": "user_transactions.amount",
+                "Description": "user_transactions.description",
+                "Date": "user_transactions.date",
+                "Primary Cat": "current_budget_items.primary_category",
+                "Secondary Cat": "current_budget_items.secondary_category",
+                "Tertiary Cat": "current_budget_items.tertiary_category",
+                "Budget Item": "current_budget_items.item_name",
+                "Inserted At": "user_transactions.created_at"
+              });
 
 
           } else{
             //simply append new transactions to what is already in table
-            insertedTrans = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+            //returns an array of one element, which is the auto_increment ID of that row (e.g., [101]).
+            const firstObjID = await trx("user_transactions").insert(processedTransactions); //use trx instead of req.db
+
+            const lastObjID = firstObjID[0] + processedTransactions.length - 1;  //e.g. 40 = 33 + 7
 
             //now query to return the newly inserted transactions and assign them to the variable
             insertedTrans = await trx("user_transactions")
-              .whereBetween('transaction_id', [firstObjID, lastObjID]) 
-              .andWhere({ user_id : userId })
-              .select("*");
+              .leftJoin("current_budget_items", "user_transactions.budget_item_id", "=", "current_budget_items.id")
+              .whereBetween('user_transactions.transaction_id', [firstObjID, lastObjID]) 
+              .andWhere({ "user_transactions.user_id" : userId })
+              .select({
+                "Transaction ID": "user_transactions.transaction_id",
+                "Amount": "user_transactions.amount",
+                "Description": "user_transactions.description",
+                "Date": "user_transactions.date",
+                "Primary Cat": "current_budget_items.primary_category",
+                "Secondary Cat": "current_budget_items.secondary_category",
+                "Tertiary Cat": "current_budget_items.tertiary_category",
+                "Budget Item": "current_budget_items.item_name",
+                "Inserted At": "user_transactions.created_at"
+              });
           }
 
           
