@@ -365,6 +365,22 @@ const upload = multer({ dest: 'uploads/' });
         // Transactions processing as a helper function
         async function processInsertTransactions(trx, dataObj) {
 
+          //month enum
+          const monthMap = {
+            January: 1,
+            February: 2,
+            March: 3,
+            April: 4,
+            May: 5,
+            June: 6,
+            July: 7,
+            August: 8,
+            September: 9,
+            October: 10,
+            November: 11,
+            December: 12
+          };
+
           //destructure the payload obj (I think its better to do this within the helper functions)
           const{ userId, month, year, transactions, toDo } = dataObj;
 
@@ -392,7 +408,7 @@ const upload = multer({ dest: 'uploads/' });
             const transObjects = await trx
               .from("user_transactions")
               .where("user_transactions.user_id", userId)
-              .andWhereRaw("MONTH(user_transactions.date) = ?", [month])
+              .andWhereRaw("MONTH(user_transactions.date) = ?", monthMap[month])
               .andWhereRaw("YEAR(user_transactions.date) = ?", [year])
               .del('*');
 
