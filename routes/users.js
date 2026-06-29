@@ -2,6 +2,7 @@ var express = require('express');
 var router = express.Router();
 const bcrypt = require('bcrypt'); // edit
 const jwt = require("jsonwebtoken"); //edit
+const verifyToken = require('../middleware/authorise.js');
 
 /* GET users listing. */
 router.get('/', function(req, res, next) {
@@ -133,6 +134,45 @@ router.post("/login", function (req, res) {
       res.status(500).json({ error: true, message: "Internal server error." });
     }); 
 });
+
+/* 
+
+  Route 3: Handles POST requests to extend user session.
+  1. Extract the current JWT string from the 'Authorization' header 
+  2. Verify the token using the server's secret key to ensure it hasn't been tampered with.
+  3. Extract the user payload data (e.g., userId) from that verified token.
+  4. Generate a brand-new token with a fresh expiration time (e.g., 12m) using that payload data.
+  5. Send a JSON response back to the client containing the new token string.
+
+*/
+router.post("/refresh_jwt", verifyToken, function (req, res){
+
+  
+  try {
+    // Because of the middleware, we know the token is valid.
+    // 1-Extract the current JWT string from the 'Authorization' header
+    const userPayload = {
+        id: req.user.id,
+        email: req.user.email
+        // Include any other fields you originally encoded into your login token
+    };
+
+    // Sign a brand new token with a fresh 24hr expiration window
+    const newToken = jwt.sign(userPayload, "secret key", { expiresIn: '24h' }); // change to '24h' after testing
+
+    // Send it right back to the client
+    res.json({
+        success: true,
+        token: newToken
+    });
+
+  } catch (error) {
+    console.error("Error in refresh_jwt route handler:", error);
+    res.status(500).json({ success: false, message: "Server error refreshing token" });
+  }
+
+
+})
 
 
 
