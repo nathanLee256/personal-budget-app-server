@@ -119,7 +119,13 @@ router.post("/login", function (req, res) {
         const expires_in = 60 * 60 * 24; // 1 day
         const exp = Math.floor(Date.now() / 1000) + expires_in; // Convert to Unix timestamp
 
-        const token = jwt.sign({ email, exp }, secretKey);
+        const tokenPayload = {
+          id: userId,
+          email: email,
+          exp: exp
+        };
+
+        const token = jwt.sign(tokenPayload, secretKey);
         return res.status(200).json({
           user_id: userId,
           token_type: "Bearer",
@@ -147,7 +153,6 @@ router.post("/login", function (req, res) {
 */
 router.post("/refresh_jwt", verifyToken, function (req, res){
 
-  
   try {
     // Because of the middleware, we know the token is valid.
     // 1-Extract the current JWT string from the 'Authorization' header
@@ -170,7 +175,6 @@ router.post("/refresh_jwt", verifyToken, function (req, res){
     console.error("Error in refresh_jwt route handler:", error);
     res.status(500).json({ success: false, message: "Server error refreshing token" });
   }
-
 
 })
 
