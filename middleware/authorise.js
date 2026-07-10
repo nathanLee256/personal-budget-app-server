@@ -5,6 +5,7 @@
     If the token is valid, it calls next(), which passes control along to your actual route logic.
 */
 const jwt = require("jsonwebtoken");
+const jwtKey = process.env.SECRET_KEY;
 
 module.exports = async function (req, res, next) {
     const authorization = req.headers.authorization;
@@ -20,7 +21,7 @@ module.exports = async function (req, res, next) {
 
     try {
         // Verify the token and decode its payload
-        const decoded = jwt.verify(token, "secret key");
+        const decoded = jwt.verify(token, jwtKey);
         
         // 💥 FIX: jsonwebtoken's verify() already checks expiration automatically. 
         // If it was expired, it would have already jumped straight to the catch block!
