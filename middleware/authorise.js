@@ -6,7 +6,7 @@
 */
 const jwt = require("jsonwebtoken");
 
-module.exports = function (req, res, next) {
+module.exports = async function (req, res, next) {
     const authorization = req.headers.authorization;
     let token = null;
 
@@ -29,6 +29,20 @@ module.exports = function (req, res, next) {
         req.user = decoded; 
 
         // add a security check here to check whether the extracted id and email values reference a user in the db
+        // Query the "users" table in the database to check if the user exists
+        const user = await req.db
+            .from("users")
+            .where("users.user_id", decoded.id)
+            .andWhere("users.email", decoded.email)
+            .first();
+
+            if(!user){
+                console.log(`Security alert: Token valid but user with id ${decoded.id} and email ${decoded.email} was not found.`);
+                return res.status(401).json({
+                    success: false, 
+                    message: "Unauthorised access: User no longer exists."
+                })
+            }
         
         next(); // Move on to your route handler
     } catch (err) {
