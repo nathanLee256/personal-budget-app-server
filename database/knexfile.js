@@ -5,12 +5,15 @@ which stores all of our connection information  */
 // property values below with updated values once I have installed mySQL and
 // created my database server on this pc
 
+const dbHost = process.env.DB_HOST;
+const dbPassword = process.env.DB_PASSWORD;
+
 module.exports = {
     client: "mysql2",
     connection: {
-        host: 'localhost',
+        host: dbHost,
         database: 'budget_app',
         user: 'nathan_a',
-        password: '(!nathan)',
+        password: dbPassword,
     },
 };
