@@ -3,6 +3,7 @@ var router = express.Router();
 const bcrypt = require('bcrypt'); // edit
 const jwt = require("jsonwebtoken"); //edit
 const verifyToken = require('../middleware/authorise.js');
+const jwtKey = process.env.SECRET_KEY;
 
 /* GET users listing. */
 router.get('/', function(req, res, next) {
@@ -115,7 +116,7 @@ router.post("/login", function (req, res) {
         }
 
         // ✅ Generate and send JWT only if password is correct
-        const secretKey = "secret key"; // Use environment variables for security
+        const secretKey = jwtKey; // Use environment variables for security
         const expires_in = 60 * 60 * 24; // 1 day
         const exp = Math.floor(Date.now() / 1000) + expires_in; // Convert to Unix timestamp
 
