@@ -6,6 +6,9 @@ var logger = require('morgan');
 const swaggerUI = require('swagger-ui-express'); 
 const swaggerDocument = require('./docs/swagger.json');
 const cors = require('cors'); // Import cors
+require('dotenv').config(); // package which reads the environment variables defined in .env file and makes them available on process.env object
+
+
 
 
 
